@@ -1,5 +1,9 @@
 """ Module containing IP configs """
 
+import os, random
+from os import getenv
+from C import setenv(cobj, cobj, int) -> int
+
 # Network
 # Network delay in microseconds per each NETWORK_DELAY_THRESHOLD bytes sent.
 NETWORK_DELAY_TIME: Static[int] = 0
@@ -7,10 +11,16 @@ NETWORK_DELAY_THRESHOLD: Static[int] = 5000000
 
 # Ports
 # Port will be added for each connection between computing parties.
-# The first port is the COMMUNICATION_PORT below and the rest are built incrementally.
-# Make sure the firewall setting of the listener allows these ports (both data-sharing anc communication).
-DATA_SHARING_PORT = 9999
-COMMUNICATION_PORT = 9000
+# Choose a base port; allow override via SEQURE_PORT_BASE to avoid collisions.
+_BASE_PORT: int = 20000
+_base_env = getenv("SEQURE_PORT_BASE")
+if _base_env:
+    _BASE_PORT = int(_base_env)
+else:
+    _BASE_PORT = 20000 + random.randrange(1000)
+    setenv("SEQURE_PORT_BASE".c_str(), str(_BASE_PORT).c_str(), 1)
+DATA_SHARING_PORT = _BASE_PORT + 999
+COMMUNICATION_PORT = _BASE_PORT
 
 # Sequre big-integer sizes
 MPC_INT_SIZE: Static[int] = 256

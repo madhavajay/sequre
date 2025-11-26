@@ -270,6 +270,7 @@ class MPCComms[TP]:
             self.send(1, self.pid + 1)
 
     def __setup_channels(self, expect_data_sharing):
+        print(f"[CP{self.pid}] local={self.local} base_port={COMMUNICATION_PORT}")
         # Sockets are spawned per corresponding party
         for pid in range(self.number_of_parties):
             if pid == self.pid:
@@ -282,10 +283,10 @@ class MPCComms[TP]:
 
             port = COMMUNICATION_PORT + offset_major + offset_minor
             if self.local:
-                self.sockets[pid] = CSocket(unix_file_address=f"{AF_UNIX_PREFIX}{port}")
+                ip_address = '127.0.0.1'
             else:
                 ip_address = '0.0.0.0' if self.pid < pid else CP_IPS[pid]
-                self.sockets[pid] = CSocket(ip_address=ip_address, port=str(port))
+            self.sockets[pid] = CSocket(ip_address=ip_address, port=str(port))
 
             if self.pid < pid:
                 self.sockets[pid].open_channel()
@@ -294,7 +295,7 @@ class MPCComms[TP]:
                     raise ValueError(f"CP{self.pid} failed to connect to CP{pid}")
 
         if expect_data_sharing:
-            assert not self.local, "Local data sharing not supported yet"
             # Data sharing host socket is at self.sockets[self.pid]
-            self.sockets[self.pid] = CSocket(ip_address='0.0.0.0', port=str(DATA_SHARING_PORT + self.pid))
+            ds_host = '127.0.0.1' if self.local else '0.0.0.0'
+            self.sockets[self.pid] = CSocket(ip_address=ds_host, port=str(DATA_SHARING_PORT + self.pid))
             self.sockets[self.pid].open_channel()

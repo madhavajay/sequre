@@ -2,6 +2,7 @@
 from llvm import *
 
 from sequre.constants import DEBUG, GMP_LIMB_SIZE, GMP_PATH, gmp_limb_t
+from internal.dlopen import dlopen, RTLD_NOW, RTLD_GLOBAL
 
 
 class mpz_t:
@@ -9,6 +10,8 @@ class mpz_t:
     _mp_size: i32
     _mp_d: Ptr[gmp_limb_t]
 
+# Ensure the GMP shared library is loaded before resolving symbols.
+_gmp_handle = dlopen(GMP_PATH, RTLD_NOW | RTLD_GLOBAL)
 
 from C import GMP_PATH.__gmpz_sizeinbase(mpz_t, i32) -> u32 as mpz_sizeinbase
 from C import GMP_PATH.__gmpz_invert(mpz_t, mpz_t, mpz_t) -> i32 as mpz_invert
