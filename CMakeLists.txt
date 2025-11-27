@@ -10,22 +10,44 @@ include_directories(.)
 set(CPM_DOWNLOAD_VERSION 0.32.3)
 set(CPM_DOWNLOAD_LOCATION "${CMAKE_BINARY_DIR}/cmake/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
 if(NOT (EXISTS ${CPM_DOWNLOAD_LOCATION}))
-    message(STATUS "Downloading CPM.cmake...")
-    file(DOWNLOAD https://github.com/TheLartians/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake ${CPM_DOWNLOAD_LOCATION})
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/cmake")
+    # Prefer a locally built copy from the Codon tree to avoid network fetches.
+    set(CPM_FALLBACK "${CMAKE_SOURCE_DIR}/../codon/build/cmake/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
+    if(EXISTS ${CPM_FALLBACK})
+        message(STATUS "Using bundled CPM.cmake from ${CPM_FALLBACK}")
+        file(COPY ${CPM_FALLBACK} DESTINATION "${CMAKE_BINARY_DIR}/cmake")
+    else()
+        message(STATUS "Downloading CPM.cmake...")
+        file(DOWNLOAD https://github.com/TheLartians/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake ${CPM_DOWNLOAD_LOCATION})
+    endif()
 endif()
 include(${CPM_DOWNLOAD_LOCATION})
 
-CPMAddPackage(
-    NAME xz
-    GITHUB_REPOSITORY "xz-mirror/xz"
-    VERSION 5.2.5
-    GIT_TAG e7da44d5151e21f153925781ad29334ae0786101
-    EXCLUDE_FROM_ALL YES
-    OPTIONS "BUILD_SHARED_LIBS OFF"
-            "CMAKE_POSITION_INDEPENDENT_CODE ON")
-if(xz_ADDED)
-    set_target_properties(xz PROPERTIES EXCLUDE_FROM_ALL ON)
-    set_target_properties(xzdec PROPERTIES EXCLUDE_FROM_ALL ON)
+set(SYQURE_SKIP_XZ ON) # default to skipping xz to avoid network fetches
+if(DEFINED ENV{SYQURE_SKIP_XZ} AND "$ENV{SYQURE_SKIP_XZ}" STREQUAL "1")
+    # stay skipped
+elseif(DEFINED ENV{ALLOW_XZ_FETCH})
+    set(SYQURE_SKIP_XZ OFF)
+elseif(DEFINED ENV{XZ_SOURCE_DIR} AND EXISTS "$ENV{XZ_SOURCE_DIR}")
+    message(STATUS "Using pre-downloaded xz from $ENV{XZ_SOURCE_DIR}")
+    set(XZ_SOURCE_DIR_OVERRIDE "$ENV{XZ_SOURCE_DIR}")
+    set(SYQURE_SKIP_XZ OFF)
+endif()
+
+if(NOT SYQURE_SKIP_XZ)
+    CPMAddPackage(
+        NAME xz
+        GITHUB_REPOSITORY "xz-mirror/xz"
+        VERSION 5.2.5
+        GIT_TAG e7da44d5151e21f153925781ad29334ae0786101
+        SOURCE_DIR ${XZ_SOURCE_DIR_OVERRIDE}
+        EXCLUDE_FROM_ALL YES
+        OPTIONS "BUILD_SHARED_LIBS OFF"
+                "CMAKE_POSITION_INDEPENDENT_CODE ON")
+    if(xz_ADDED)
+        set_target_properties(xz PROPERTIES EXCLUDE_FROM_ALL ON)
+        set_target_properties(xzdec PROPERTIES EXCLUDE_FROM_ALL ON)
+    endif()
 endif()
 
 set(SEQURE_FILES
