@@ -30,14 +30,14 @@ u64xN = Vec[u64, SIMD_LANE_SIZE]
 f64xN = Vec[float, SIMD_LANE_SIZE]
 
 
-# Socket instrinsics
+# Socket intrinsics
 @tuple
 class in_addr:
     s_addr: u32
 @tuple
 class sockaddr_in:
-    sin_len: UInt[8]
-    sin_family: UInt[8]
+    # Linux structure (no sin_len field)
+    sin_family: u16
     sin_port: u16
     sin_addr: in_addr
     sin_zero: u64  # padding

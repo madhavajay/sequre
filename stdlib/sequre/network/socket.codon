@@ -86,4 +86,5 @@ class CSocket:
         return serveraddr
     
     def _set_inet_serveraddr(self: CSocket, ip_address: str, port: str) -> sockaddr_in:
-        return sockaddr_in(UInt[8](16), UInt[8](AF_INET), htons(u16(port)), in_addr(inet_addr(ip_address.c_str())), u64(0))
+        # Linux: no sin_len field, sin_family is u16
+        return sockaddr_in(u16(AF_INET), htons(u16(port)), in_addr(inet_addr(ip_address.c_str())), u64(0))
