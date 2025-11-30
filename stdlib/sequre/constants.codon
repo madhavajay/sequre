@@ -9,8 +9,28 @@ ENV_CP_IPS: Static[str] = "SEQURE_CP_IPS"
 ENV_NUMBER_OF_PARTIES: Static[str] = "SEQURE_CP_COUNT"
 ENV_GMP_PATH: Static[str] = "SEQURE_GMP_PATH"
 
+# Platform detection
+from C import uname(cobj) -> int
+IS_MACOS = False
+IS_LINUX = False
+
+def _detect_platform():
+    # Use uname system call to detect platform
+    import sys
+    platform_name = sys.platform
+    global IS_MACOS, IS_LINUX
+    if "darwin" in platform_name.lower():
+        IS_MACOS = True
+    elif "linux" in platform_name.lower():
+        IS_LINUX = True
+
+_detect_platform()
+
 # GMP: platform-specific defaults (override with SEQURE_GMP_PATH env var)
-GMP_PATH = os.getenv(ENV_GMP_PATH, default="libgmp.so")
+if IS_MACOS:
+    GMP_PATH = os.getenv(ENV_GMP_PATH, default="/opt/homebrew/opt/gmp/lib/libgmp.dylib")
+else:
+    GMP_PATH = os.getenv(ENV_GMP_PATH, default="libgmp.so")
 GMP_LIMB_SIZE: Static[int] = 64
 assert LATTISEQ_INT_SIZE % GMP_LIMB_SIZE == 0, f"GMP limb size {GMP_LIMB_SIZE} should be a multiple of Lattiseq big int size {LATTISEQ_INT_SIZE}."
 

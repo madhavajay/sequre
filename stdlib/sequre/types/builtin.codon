@@ -34,13 +34,26 @@ f64xN = Vec[float, SIMD_LANE_SIZE]
 @tuple
 class in_addr:
     s_addr: u32
-@tuple
-class sockaddr_in:
-    # Linux structure (no sin_len field)
-    sin_family: u16
-    sin_port: u16
-    sin_addr: in_addr
-    sin_zero: u64  # padding
+
+# Define platform-specific sockaddr_in
+# Note: Structure layout must match OS expectations exactly
+if IS_MACOS:
+    # macOS/BSD: includes sin_len field
+    @tuple
+    class sockaddr_in:
+        sin_len: UInt[8]
+        sin_family: UInt[8]
+        sin_port: u16
+        sin_addr: in_addr
+        sin_zero: u64
+else:
+    # Linux: no sin_len field, sin_family is u16
+    @tuple
+    class sockaddr_in:
+        sin_family: u16
+        sin_port: u16
+        sin_addr: in_addr
+        sin_zero: u64
 @tuple
 class sockaddr_un:
     sun_family: int
