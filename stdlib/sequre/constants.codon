@@ -7,9 +7,10 @@ from settings import *
 # Environment variables
 ENV_CP_IPS: Static[str] = "SEQURE_CP_IPS"
 ENV_NUMBER_OF_PARTIES: Static[str] = "SEQURE_CP_COUNT"
+ENV_GMP_PATH: Static[str] = "SEQURE_GMP_PATH"
 
-# GMP: default to Homebrew install on macOS (set SEQURE_GMP_PATH and rebuild to override).
-GMP_PATH = "/opt/homebrew/opt/gmp/lib/libgmp.dylib"
+# GMP: platform-specific defaults (override with SEQURE_GMP_PATH env var)
+GMP_PATH = os.getenv(ENV_GMP_PATH, default="libgmp.so")
 GMP_LIMB_SIZE: Static[int] = 64
 assert LATTISEQ_INT_SIZE % GMP_LIMB_SIZE == 0, f"GMP limb size {GMP_LIMB_SIZE} should be a multiple of Lattiseq big int size {LATTISEQ_INT_SIZE}."
 
