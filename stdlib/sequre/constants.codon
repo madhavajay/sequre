@@ -9,22 +9,21 @@ ENV_CP_IPS: Static[str] = "SEQURE_CP_IPS"
 ENV_NUMBER_OF_PARTIES: Static[str] = "SEQURE_CP_COUNT"
 ENV_GMP_PATH: Static[str] = "SEQURE_GMP_PATH"
 
-# Platform detection
-from C import uname(cobj) -> int
-IS_MACOS = False
-IS_LINUX = False
-
-def _detect_platform():
-    # Use uname system call to detect platform
-    import sys
-    platform_name = sys.platform
-    global IS_MACOS, IS_LINUX
-    if "darwin" in platform_name.lower():
-        IS_MACOS = True
-    elif "linux" in platform_name.lower():
-        IS_LINUX = True
-
-_detect_platform()
+# Platform detection using environment variable or compile-time detection
+# User can set SEQURE_PLATFORM=macos or SEQURE_PLATFORM=linux
+# Otherwise we detect based on common paths/conventions
+_platform_env = os.getenv("SEQURE_PLATFORM", default="")
+if _platform_env == "macos":
+    IS_MACOS = True
+    IS_LINUX = False
+elif _platform_env == "linux":
+    IS_MACOS = False
+    IS_LINUX = True
+else:
+    # Auto-detect: check if typical macOS path exists
+    import os.path
+    IS_MACOS = os.path.exists("/opt/homebrew") or os.path.exists("/usr/local/Homebrew")
+    IS_LINUX = not IS_MACOS
 
 # GMP: platform-specific defaults (override with SEQURE_GMP_PATH env var)
 if IS_MACOS:
