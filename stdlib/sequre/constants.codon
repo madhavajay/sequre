@@ -20,9 +20,9 @@ elif _platform_env == "linux":
     IS_MACOS = False
     IS_LINUX = True
 else:
-    # Auto-detect: check if typical macOS path exists
-    import os.path
-    IS_MACOS = os.path.exists("/opt/homebrew") or os.path.exists("/usr/local/Homebrew")
+    # Auto-detect using OSTYPE (provided by most shells); default to Linux if unknown
+    _ostype = os.getenv("OSTYPE", default="")
+    IS_MACOS = _ostype.startswith("darwin")
     IS_LINUX = not IS_MACOS
 
 # GMP: platform-specific defaults (override with SEQURE_GMP_PATH env var)
