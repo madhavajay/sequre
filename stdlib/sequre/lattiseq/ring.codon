@@ -863,10 +863,11 @@ class Poly:
                 self._buf_coeffs[i][j] = coeff
 
     def _mm_set_coeffs(self, _mm_coeffs: list[list[u64xN]]):
-        @par(num_threads=NUM_THREADS)
-        for i, row in enumerate(_mm_coeffs):
-            for j, _mm_coeff in enumerate(row):
-                self._mm_coeffs[i][j] = _mm_coeff
+        # Temporarily disable @par to test if this fixes crashes
+        # @par(num_threads=NUM_THREADS)
+        for i in range(len(_mm_coeffs)):
+            for j in range(len(_mm_coeffs[i])):
+                self._mm_coeffs[i][j] = _mm_coeffs[i][j]
     
     def _mm_set(self, other: Poly):
         self._mm_set_coeffs(other._mm_coeffs)
