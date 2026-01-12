@@ -61,6 +61,9 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 
 target_include_directories(sequre PRIVATE "${CODON_PATH}/include" ${LLVM_INCLUDE_DIRS})
+if (CODON_SOURCE_DIR)
+  target_include_directories(sequre PRIVATE "${CODON_SOURCE_DIR}")
+endif()
 target_link_directories(sequre PRIVATE "${CODON_PATH}/lib/codon")
 target_link_libraries(sequre PRIVATE codonrt codonc)
 
