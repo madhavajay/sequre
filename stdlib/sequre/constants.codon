@@ -10,9 +10,12 @@ ENV_NUMBER_OF_PARTIES: Static[str] = "SEQURE_CP_COUNT"
 ENV_TRANSPORT: Static[str] = "SEQURE_TRANSPORT"
 ENV_FILE_DIR: Static[str] = "SEQURE_FILE_DIR"
 ENV_FILE_POLL_MS: Static[str] = "SEQURE_FILE_POLL_MS"
+ENV_GMP_PATH: Static[str] = "SEQURE_GMP_PATH"
 
 # GMP
-GMP_PATH = "libgmp.so"
+GMP_PATH = os.getenv(ENV_GMP_PATH, default="libgmp.so")
+if not GMP_PATH:
+    GMP_PATH = "libgmp.so"
 GMP_LIMB_SIZE: Static[int] = 64
 assert LATTISEQ_INT_SIZE % GMP_LIMB_SIZE == 0, f"GMP limb size {GMP_LIMB_SIZE} should be a multiple of Lattiseq big int size {LATTISEQ_INT_SIZE}."
 
