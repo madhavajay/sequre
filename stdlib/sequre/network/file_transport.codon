@@ -170,10 +170,12 @@ def receive_file(sock_fd: int, msg_len: int) -> Jar:
                 if int(_C.fread(len_buf, 1, sizeof(i64), f.fp)) != sizeof(i64):
                     raise IOError("file transport: failed to read message length")
                 file_len = ptr[i64](len_buf)[0]
-                if file_len != msg_len:
+                if msg_len <= 0:
+                    msg_len = int(file_len)
+                elif file_len != msg_len:
                     raise IOError(f"file transport: expected {msg_len} bytes, got {file_len}")
-                data_buf = ptr[byte](file_len)
-                if int(_C.fread(data_buf, 1, file_len, f.fp)) != file_len:
+                data_buf = ptr[byte](msg_len)
+                if int(_C.fread(data_buf, 1, msg_len, f.fp)) != msg_len:
                     raise IOError("file transport: failed to read message body")
             read_ms = int(time.monotonic_ns() / 1_000_000) - read_start_ms
             if not FILE_TRANSPORT_KEEP:

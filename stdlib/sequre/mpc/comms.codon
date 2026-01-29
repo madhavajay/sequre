@@ -56,6 +56,8 @@ class MPCComms[TP]:
         return self.receive_as_jar(from_pid, T=T)
     
     def send_jar_size(self, data, to_pid: int):
+        if FILE_TRANSPORT:
+            return
         self.stats.send_requests += 1
         self.stats.bytes_sent += sizeof(int)
         jar = ptr[byte](sizeof(int))
@@ -63,13 +65,16 @@ class MPCComms[TP]:
         snd_jar(self.sockets[to_pid].sock_fd, jar, sizeof(int))
     
     def receive_jar_size(self, from_pid: int) -> int:
+        if FILE_TRANSPORT:
+            return 0
         self.stats.receive_requests += 1
         return unpickle(receive_jar(self.sockets[from_pid].sock_fd, sizeof(int)), False, int)
     
     def send_as_jar(self, data, to_pid: int):
         self.stats.send_requests += 1
-        self.send_jar_size(data, to_pid)
         pickle_size = data._pickle_size()
+        if not FILE_TRANSPORT:
+            self.send_jar_size(data, to_pid)
 
         if NETWORK_DELAY_TIME > 0:
             self.delay_buffer_size += pickle_size + sizeof(int)
@@ -85,8 +90,11 @@ class MPCComms[TP]:
 
     def receive_as_jar[T](self, from_pid: int) -> T:
         self.stats.receive_requests += 1
-        msg_len = self.receive_jar_size(from_pid)
-        received_jar = receive_jar(self.sockets[from_pid].sock_fd, msg_len)
+        if FILE_TRANSPORT:
+            received_jar = receive_jar(self.sockets[from_pid].sock_fd, -1)
+        else:
+            msg_len = self.receive_jar_size(from_pid)
+            received_jar = receive_jar(self.sockets[from_pid].sock_fd, msg_len)
         return unpickle(received_jar, False, T)
     
     def share_from(self, data, source_pid: int, modulus):
