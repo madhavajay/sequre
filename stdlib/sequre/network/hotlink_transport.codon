@@ -1,265 +1,27 @@
-import os
-import time
+"""Hotlink transport stub.
 
-from internal.gc import sizeof
+The full implementation (Unix socket / TCP framed IPC) is disabled because its
+C FFI imports (send, recv, socket, connect, close) and sockaddr_un/sockaddr_in
+usage corrupt the Codon JIT compiler at compile time — even when the code is
+never executed at runtime (HOTLINK_TRANSPORT=False, default transport is TCP).
 
-from sequre.constants import (
-    FILE_TRANSPORT_DIR, AF_UNIX, AF_INET, SOCK_STREAM,
-    PARTY_EMAILS, DATASITES_ROOT, FILE_TRANSPORT_DEBUG)
-from sequre.types.builtin import sockaddr_un, sockaddr_in, in_addr
+This causes segfaults during MPC party setup after fork().
 
-from C import access(cobj, int) -> int
-from C import usleep(int) -> int
-from C import send(int, cobj, int, int) -> int
-from C import recv(int, cobj, int, int) -> int
-from C import memcpy(cobj, cobj, int)
-from C import socket(int, int, int) -> int
-from C import connect(int, cobj, int) -> int
-from C import htons(u16) -> u16
-from C import inet_addr(cobj) -> u32
-from C import perror(cobj)
-from C import close(int) -> int
+To restore: replace this stub with the full hotlink_transport.codon once the
+Codon JIT issue with duplicate/conflicting C FFI bindings is resolved.
+See syqure-problem.md for the full investigation.
+"""
 
-
-hotlink_send_sock = dict[int, int]()
-hotlink_recv_sock = dict[int, int]()
-
-HOTLINK_MAGIC = [byte(72), byte(76), byte(78), byte(75)]  # "HLNK"
-HOTLINK_VERSION = 1
-
-
-def _hotlink_marker_name() -> str:
-    mode = os.getenv("SYFTBOX_HOTLINK_IPC", default="").strip().lower()
-    if mode == "tcp":
-        return "stream.tcp"
-    return "stream.sock"
-
-def _hotlink_marker_path(base_dir: str, from_pid: int, to_pid: int) -> str:
-    channel_dir = f"{base_dir}/{from_pid}_to_{to_pid}"
-    return f"{channel_dir}/{_hotlink_marker_name()}"
-
-def _hotlink_accept_path(base_dir: str, from_pid: int, to_pid: int) -> str:
-    channel_dir = f"{base_dir}/{from_pid}_to_{to_pid}"
-    return f"{channel_dir}/stream.accept"
-
-def _ensure_file(path: str):
-    if access(path.c_str(), 0) == 0:
-        return
-    try:
-        with open(path, "w") as f:
-            f.write("")
-    except Exception:
-        pass
-
-def _wait_for_marker_target(path: str, timeout_ms: int = 5000) -> str:
-    deadline = time.monotonic_ns() + timeout_ms * 1_000_000
-    poll_us = 10_000
-    while time.monotonic_ns() < deadline:
-        try:
-            with open(path, "r") as f:
-                target = f.read().strip()
-                if target != "":
-                    return target
-        except Exception:
-            pass
-        usleep(poll_us)
-    raise IOError("hotlink ipc marker missing target")
-
-def _base_dir_for_pid(pid: int) -> str:
-    if DATASITES_ROOT != "" and PARTY_EMAILS:
-        if pid < 0 or pid >= len(PARTY_EMAILS):
-            raise ValueError("hotlink transport: pid out of range for PARTY_EMAILS")
-        return f"{DATASITES_ROOT}/{PARTY_EMAILS[pid]}/{FILE_TRANSPORT_DIR}"
-    return FILE_TRANSPORT_DIR
-
-def _log_pid(pid: int, message: str):
-    if not FILE_TRANSPORT_DEBUG:
-        return
-    ts_ms = int(time.monotonic_ns() / 1_000_000)
-    base_dir = _base_dir_for_pid(pid)
-    log_path = f"{base_dir}/hotlink_transport.log"
-    try:
-        with open(log_path, "a+") as f:
-            f.write(f"{ts_ms} {message}\n")
-    except Exception:
-        pass
-
-
-def connect_hotlink_target(target: str) -> int:
-    for _ in range(50):
-        if ":" in target and not target.startswith("/"):
-            parts = target.split(":", 1)
-            fd = socket(AF_INET, SOCK_STREAM, 0)
-            if fd == -1:
-                perror("hotlink socket".c_str())
-                usleep(20_000)
-                continue
-            addr = sockaddr_in(u16(AF_INET), htons(u16(parts[1])), in_addr(inet_addr(parts[0].c_str())), u64(0))
-            if connect(fd, __ptr__(addr).as_byte(), sizeof(sockaddr_in)) == 0:
-                return fd
-        else:
-            fd = socket(AF_UNIX, SOCK_STREAM, 0)
-            if fd == -1:
-                perror("hotlink socket".c_str())
-                usleep(20_000)
-                continue
-            addr = sockaddr_un(AF_UNIX, ptr[byte](len(target)))
-            addr_ptr = ptr[byte](__ptr__(addr).as_byte())
-            memcpy(addr_ptr, ptr[byte](__ptr__(AF_UNIX).as_byte()), 2)
-            memcpy(addr_ptr + 2, target.c_str(), len(target))
-            if connect(fd, __ptr__(addr).as_byte(), len(target) + 2) == 0:
-                return fd
-        usleep(20_000)
-    raise IOError(f"hotlink ipc connect failed: {target}")
-
-def get_hotlink_conn(sock_fd: int, local_pid: int, from_pid: int, to_pid: int, cache: dict[int, int], persist: bool) -> Tuple[int, bool]:
-    if persist and sock_fd in cache:
-        return cache[sock_fd], True
-    base_dir = _base_dir_for_pid(local_pid)
-    marker_path = _hotlink_marker_path(base_dir, from_pid, to_pid)
-    _ensure_file(marker_path)
-    target = _wait_for_marker_target(marker_path)
-    conn_fd = connect_hotlink_target(target)
-    if persist:
-        cache[sock_fd] = conn_fd
-        return conn_fd, True
-    return conn_fd, False
-
-def send_all(sock_fd: int, buffer: ptr[byte], length: int):
-    total = 0
-    while total < length:
-        sent = send(sock_fd, buffer + total, length - total, 0)
-        if sent <= 0:
-            raise IOError("hotlink ipc send failed")
-        total += sent
-
-def recv_exact(sock_fd: int, length: int) -> ptr[byte]:
-    buf = ptr[byte](length)
-    total = 0
-    while total < length:
-        got = recv(sock_fd, buf + total, length - total, 0)
-        if got <= 0:
-            raise IOError("hotlink ipc recv failed")
-        total += got
-    return buf
-
-def _write_u16_be(buf: ptr[byte], offset: int, value: int):
-    buf[offset] = byte((value >> 8) & 0xFF)
-    buf[offset + 1] = byte(value & 0xFF)
-
-def _write_u32_be(buf: ptr[byte], offset: int, value: int):
-    buf[offset] = byte((value >> 24) & 0xFF)
-    buf[offset + 1] = byte((value >> 16) & 0xFF)
-    buf[offset + 2] = byte((value >> 8) & 0xFF)
-    buf[offset + 3] = byte(value & 0xFF)
-
-def _write_u64_be(buf: ptr[byte], offset: int, value: int):
-    for i in range(8):
-        shift = (7 - i) * 8
-        buf[offset + i] = byte((value >> shift) & 0xFF)
-
-def encode_hotlink_frame(path: str, etag: str, seq: int, payload: Jar, payload_len: int) -> Tuple[ptr[byte], int]:
-    path_len = len(path)
-    etag_len = len(etag)
-    header_len = 4 + 1 + 2 + 2 + 4 + 8
-    total = header_len + path_len + etag_len + payload_len
-    buf = ptr[byte](total)
-    buf[0] = HOTLINK_MAGIC[0]
-    buf[1] = HOTLINK_MAGIC[1]
-    buf[2] = HOTLINK_MAGIC[2]
-    buf[3] = HOTLINK_MAGIC[3]
-    buf[4] = byte(HOTLINK_VERSION)
-    _write_u16_be(buf, 5, path_len)
-    _write_u16_be(buf, 7, etag_len)
-    _write_u32_be(buf, 9, payload_len)
-    _write_u64_be(buf, 13, seq)
-    offset = header_len
-    if path_len > 0:
-        memcpy(buf + offset, path.c_str(), path_len)
-        offset += path_len
-    if etag_len > 0:
-        memcpy(buf + offset, etag.c_str(), etag_len)
-        offset += etag_len
-    if payload_len > 0:
-        memcpy(buf + offset, payload, payload_len)
-    return buf, total
-
-def read_hotlink_frame(sock_fd: int) -> Tuple[int, ptr[byte], int]:
-    window = list[byte]()
-    while True:
-        b = recv_exact(sock_fd, 1)[0]
-        if len(window) < 4:
-            window.append(b)
-        else:
-            window.pop(0)
-            window.append(b)
-        if len(window) == 4 and window[0] == HOTLINK_MAGIC[0] and window[1] == HOTLINK_MAGIC[1] and window[2] == HOTLINK_MAGIC[2] and window[3] == HOTLINK_MAGIC[3]:
-            break
-
-    header = recv_exact(sock_fd, 1 + 2 + 2 + 4 + 8)
-    if int(header[0]) != HOTLINK_VERSION:
-        raise IOError("hotlink ipc unsupported version")
-    path_len = (int(header[1]) << 8) | int(header[2])
-    etag_len = (int(header[3]) << 8) | int(header[4])
-    payload_len = (int(header[5]) << 24) | (int(header[6]) << 16) | (int(header[7]) << 8) | int(header[8])
-    seq = 0
-    for i in range(8):
-        seq = (seq << 8) | int(header[9 + i])
-
-    if path_len > 0:
-        recv_exact(sock_fd, path_len)
-    if etag_len > 0:
-        recv_exact(sock_fd, etag_len)
-    payload = ptr[byte](payload_len)
-    if payload_len > 0:
-        payload = recv_exact(sock_fd, payload_len)
-    return seq, payload, payload_len
+from sequre.constants import FILE_TRANSPORT_DIR, FILE_TRANSPORT_DEBUG
 
 
 def hotlink_register_extras(local_dir: str, local_pid: int, remote_pid: int):
-    _ensure_file(_hotlink_marker_path(local_dir, local_pid, remote_pid))
-    _ensure_file(_hotlink_marker_path(local_dir, remote_pid, local_pid))
-    _ensure_file(_hotlink_accept_path(local_dir, remote_pid, local_pid))
+    pass
 
 
 def hotlink_send(sock_fd: int, local_pid: int, remote_pid: int, seq: int, jar: Jar, msg_len: int) -> bool:
-    conn_fd = -1
-    keep_conn = False
-    try:
-        rel_path = f"{FILE_TRANSPORT_DIR}/{local_pid}_to_{remote_pid}/{seq:08d}.request"
-        conn_fd, keep_conn = get_hotlink_conn(
-            sock_fd, local_pid, local_pid, remote_pid, hotlink_send_sock, False
-        )
-        frame, frame_len = encode_hotlink_frame(rel_path, "", seq, jar, msg_len)
-        send_all(conn_fd, frame, frame_len)
-        return True
-    except Exception as e:
-        _log_pid(local_pid, f"hotlink_send_failed {local_pid}->{remote_pid} seq={seq} err={e}")
-        return False
-    finally:
-        if conn_fd != -1 and not keep_conn:
-            close(conn_fd)
+    return False
 
 
 def hotlink_receive(sock_fd: int, local_pid: int, remote_pid: int, seq: int, msg_len: int) -> Tuple[bool, Jar]:
-    conn_fd = -1
-    keep_conn = False
-    try:
-        conn_fd, keep_conn = get_hotlink_conn(
-            sock_fd, local_pid, remote_pid, local_pid, hotlink_recv_sock, True
-        )
-        while True:
-            _, payload, payload_len = read_hotlink_frame(conn_fd)
-            if payload_len != msg_len:
-                _log_pid(
-                    local_pid,
-                    f"hotlink_recv_size_mismatch {remote_pid}->{local_pid} seq={seq} expected={msg_len} got={payload_len}",
-                )
-                raise IOError(f"hotlink ipc: expected {msg_len} bytes, got {payload_len}")
-            return True, payload
-    except Exception as e:
-        _log_pid(local_pid, f"hotlink_recv_failed {remote_pid}->{local_pid} seq={seq} err={e}")
-        return False, ptr[byte](0)
-    finally:
-        if conn_fd != -1 and not keep_conn:
-            close(conn_fd)
+    return False, ptr[byte](0)
