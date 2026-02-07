@@ -1,4 +1,11 @@
-""" Module containing IP configs """
+""" Module containing IP configs.
+
+WARNING: Do not use `import os` or `os.getenv()` at module level in this file.
+Codon evaluates module-level code before fork(), and os.getenv at module init
+causes segfaults when the @local decorator forks MPC parties on macOS.
+Runtime env overrides for ports (SEQURE_COMMUNICATION_PORT, SEQURE_DATA_SHARING_PORT)
+are handled in comms.codon __setup_channels instead.
+"""
 
 # Network
 # Network delay in microseconds per each NETWORK_DELAY_THRESHOLD bytes sent.

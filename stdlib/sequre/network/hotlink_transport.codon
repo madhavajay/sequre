@@ -1,0 +1,27 @@
+"""Hotlink transport stub.
+
+The full implementation (Unix socket / TCP framed IPC) is disabled because its
+C FFI imports (send, recv, socket, connect, close) and sockaddr_un/sockaddr_in
+usage corrupt the Codon JIT compiler at compile time — even when the code is
+never executed at runtime (HOTLINK_TRANSPORT=False, default transport is TCP).
+
+This causes segfaults during MPC party setup after fork().
+
+To restore: replace this stub with the full hotlink_transport.codon once the
+Codon JIT issue with duplicate/conflicting C FFI bindings is resolved.
+See syqure-problem.md for the full investigation.
+"""
+
+from sequre.constants import FILE_TRANSPORT_DIR, FILE_TRANSPORT_DEBUG
+
+
+def hotlink_register_extras(local_dir: str, local_pid: int, remote_pid: int):
+    pass
+
+
+def hotlink_send(sock_fd: int, local_pid: int, remote_pid: int, seq: int, jar: Jar, msg_len: int) -> bool:
+    return False
+
+
+def hotlink_receive(sock_fd: int, local_pid: int, remote_pid: int, seq: int, msg_len: int) -> Tuple[bool, Jar]:
+    return False, ptr[byte](0)
