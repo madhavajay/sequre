@@ -1,8 +1,9 @@
-from sequre.constants import AF_UNIX, AF_INET, SOCK_STREAM
+from sequre.constants import AF_UNIX, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
 from sequre.types.builtin import sockaddr_un, sockaddr_in, in_addr
 
 from internal.gc import sizeof
 from C import socket(int, int, int) -> int
+from C import setsockopt(int, int, int, cobj, int) -> int
 from C import bind(int, cobj, int) -> int
 from C import connect(int, cobj, int) -> int
 from C import perror(cobj)
@@ -43,6 +44,8 @@ class CSocket:
         if self.sock_fd == -1:
             perror(f'Socket not instantiated'.c_str())
             raise ValueError(f'Socket not instantiated')
+        opt_val = 1
+        setsockopt(self.sock_fd, SOL_SOCKET, SO_REUSEADDR, __ptr__(opt_val).as_byte(), 4)
 
     def connect(self: CSocket) -> bool:
         if self.is_inet:
