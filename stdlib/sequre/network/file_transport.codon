@@ -5,7 +5,8 @@ from internal.gc import sizeof
 
 from sequre.constants import (
     FILE_TRANSPORT_DIR, FILE_TRANSPORT_POLL_MS, NUMBER_OF_PARTIES,
-    PARTY_EMAILS, DATASITES_ROOT, FILE_TRANSPORT_KEEP, FILE_TRANSPORT_DEBUG)
+    PARTY_EMAILS, DATASITES_ROOT, FILE_TRANSPORT_KEEP, FILE_TRANSPORT_DEBUG,
+    HOTLINK_TRANSPORT)
 
 from C import access(cobj, int) -> int
 from C import usleep(int) -> int
@@ -89,8 +90,13 @@ def register_channel(sock_fd: int, local_pid: int, remote_pid: int, base_dir: st
         recv_seq[sock_fd] = 0
     local_dir = _base_dir_for_pid(local_pid)
     _ensure_dir(local_dir)
-    _ensure_dir(_channel_dir(local_dir, local_pid, remote_pid))
-    _ensure_dir(_channel_dir(local_dir, remote_pid, local_pid))
+    out_dir = _channel_dir(local_dir, local_pid, remote_pid)
+    in_dir = _channel_dir(local_dir, remote_pid, local_pid)
+    _ensure_dir(out_dir)
+    _ensure_dir(in_dir)
+    if HOTLINK_TRANSPORT:
+        from sequre.network.hotlink_transport import hotlink_register_extras
+        hotlink_register_extras(local_dir, local_pid, remote_pid)
     _log_pid(
         local_pid,
         f"register local_pid={local_pid} remote_pid={remote_pid} local_dir={local_dir}",
@@ -100,6 +106,11 @@ def register_channel(sock_fd: int, local_pid: int, remote_pid: int, base_dir: st
 def send_file(sock_fd: int, jar: Jar, msg_len: int) -> int:
     ch = channels[sock_fd]
     seq = send_seq[sock_fd]
+    if HOTLINK_TRANSPORT:
+        from sequre.network.hotlink_transport import hotlink_send
+        if hotlink_send(sock_fd, ch.local_pid, ch.remote_pid, seq, jar, msg_len):
+            send_seq[sock_fd] = seq + 1
+            return msg_len
     base_dir = _base_dir_for_pid(ch.local_pid)
     msg_path = _msg_path(base_dir, ch.local_pid, ch.remote_pid, seq)
     tmp_path = f"{msg_path}.tmp"
@@ -129,6 +140,12 @@ def send_file(sock_fd: int, jar: Jar, msg_len: int) -> int:
 def receive_file(sock_fd: int, msg_len: int) -> Jar:
     ch = channels[sock_fd]
     seq = recv_seq[sock_fd]
+    if HOTLINK_TRANSPORT:
+        from sequre.network.hotlink_transport import hotlink_receive
+        ok, payload = hotlink_receive(sock_fd, ch.local_pid, ch.remote_pid, seq, msg_len)
+        if ok:
+            recv_seq[sock_fd] = seq + 1
+            return payload
     base_dir = _base_dir_for_pid(ch.remote_pid)
     msg_path = _msg_path(base_dir, ch.remote_pid, ch.local_pid, seq)
     _log_pid(

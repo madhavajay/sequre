@@ -1,11 +1,12 @@
 from pickler import pickle, unpickle
 from internal.gc import sizeof
+import os
 
 from sequre.constants import (
     DATA_SHARING_PORT, COMMUNICATION_PORT, CP_IPS,
     NUMBER_OF_PARTIES, AF_UNIX_PREFIX,
     NETWORK_DELAY_TIME, NETWORK_DELAY_THRESHOLD,
-    FILE_TRANSPORT, FILE_TRANSPORT_DIR)
+    FILE_TRANSPORT, FILE_TRANSPORT_DIR, TCP_PROXY)
 from sequre.types.utils import fp_to_double
 from sequre.network.socket import CSocket
 from sequre.network.connect import connect
@@ -16,6 +17,12 @@ from stats import MPCStats
 from randomness import MPCRandomness
 
 from C import usleep(int) -> int
+
+
+def _env_truthy(name: str, default: bool = False) -> bool:
+    default_str = "1" if default else "0"
+    raw = os.getenv(name, default=default_str)
+    return raw == "1" or raw == "true" or raw == "True"
 
 
 class MPCComms[TP]:
@@ -272,6 +279,11 @@ class MPCComms[TP]:
             self.send(1, self.pid + 1)
 
     def __setup_channels(self, expect_data_sharing):
+        runtime_tcp_proxy = _env_truthy("SEQURE_TCP_PROXY", TCP_PROXY)
+        runtime_comm_port = int(os.getenv("SEQURE_COMMUNICATION_PORT", default=str(COMMUNICATION_PORT)))
+        runtime_cp_ips_str = os.getenv("SEQURE_CP_IPS")
+        runtime_cp_ips: List[str] = runtime_cp_ips_str.split(",") if runtime_cp_ips_str else CP_IPS
+
         # Sockets are spawned per corresponding party
         for pid in range(self.number_of_parties):
             if pid == self.pid:
@@ -282,18 +294,24 @@ class MPCComms[TP]:
                 self.sockets[pid].sock_fd = file_socket_id(self.pid, pid)
                 register_channel(self.sockets[pid].sock_fd, self.pid, pid, FILE_TRANSPORT_DIR)
                 continue
-            
+
             min_pid = min(pid, self.pid)
             max_pid = max(pid, self.pid)
             offset_major = min_pid * self.number_of_parties - min_pid * (min_pid + 1) // 2
             offset_minor = max_pid - (min_pid if self.pid == max_pid else self.pid)
 
-            port = COMMUNICATION_PORT + offset_major + offset_minor
+            port = runtime_comm_port + offset_major + offset_minor
+            if runtime_tcp_proxy:
+                ip_address = runtime_cp_ips[pid] if runtime_cp_ips else '127.0.0.1'
+                self.sockets[pid] = CSocket(ip_address=ip_address, port=str(port))
+                if (not connect(self.sockets[pid])):
+                    raise ValueError(f"CP{self.pid} failed to connect to CP{pid} via proxy")
+                continue
             if self.local:
                 ip_address = '0.0.0.0' if self.pid < pid else '127.0.0.1'
                 self.sockets[pid] = CSocket(ip_address=ip_address, port=str(port))
             else:
-                ip_address = '0.0.0.0' if self.pid < pid else CP_IPS[pid]
+                ip_address = '0.0.0.0' if self.pid < pid else runtime_cp_ips[pid]
                 self.sockets[pid] = CSocket(ip_address=ip_address, port=str(port))
 
             if self.pid < pid:

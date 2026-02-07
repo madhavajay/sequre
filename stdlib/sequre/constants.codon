@@ -15,6 +15,7 @@ ENV_FILE_KEEP: Static[str] = "SEQURE_FILE_KEEP"
 ENV_FILE_DEBUG: Static[str] = "SEQURE_FILE_DEBUG"
 ENV_PARTY_EMAILS: Static[str] = "SEQURE_PARTY_EMAILS"
 ENV_DATASITES_ROOT: Static[str] = "SEQURE_DATASITES_ROOT"
+ENV_TCP_PROXY: Static[str] = "SEQURE_TCP_PROXY"
 
 # GMP
 GMP_PATH = os.getenv(ENV_GMP_PATH, default="libgmp.so")
@@ -60,7 +61,8 @@ CP_IPS_STR: str = os.getenv(ENV_CP_IPS)
 CP_IPS: List[str] = CP_IPS_STR.split(",") if CP_IPS_STR else []
 NUMBER_OF_PARTIES: int = int(os.getenv(ENV_NUMBER_OF_PARTIES, default="3"))
 TRANSPORT: str = os.getenv(ENV_TRANSPORT, default="tcp")
-FILE_TRANSPORT: bool = TRANSPORT == "file"
+HOTLINK_TRANSPORT: bool = TRANSPORT == "hotlink"
+FILE_TRANSPORT: bool = TRANSPORT == "file" or HOTLINK_TRANSPORT
 FILE_TRANSPORT_DIR: str = os.getenv(ENV_FILE_DIR, default="./syqure-messages")
 FILE_TRANSPORT_POLL_MS: int = int(os.getenv(ENV_FILE_POLL_MS, default="50"))
 FILE_TRANSPORT_KEEP_STR: str = os.getenv(ENV_FILE_KEEP, default="0")
@@ -70,6 +72,8 @@ FILE_TRANSPORT_DEBUG: bool = FILE_TRANSPORT_DEBUG_STR == "1" or FILE_TRANSPORT_D
 PARTY_EMAILS_STR: str = os.getenv(ENV_PARTY_EMAILS)
 PARTY_EMAILS: List[str] = PARTY_EMAILS_STR.split(",") if PARTY_EMAILS_STR else []
 DATASITES_ROOT: str = os.getenv(ENV_DATASITES_ROOT, default="")
+TCP_PROXY_STR: str = os.getenv(ENV_TCP_PROXY, default="0")
+TCP_PROXY: bool = TCP_PROXY_STR == "1" or TCP_PROXY_STR == "true" or TCP_PROXY_STR == "True"
 
 if CP_IPS:
     NUMBER_OF_PARTIES = len(CP_IPS)
