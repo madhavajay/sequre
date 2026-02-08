@@ -24,6 +24,10 @@ def _env_truthy(name: str, default: bool = False) -> bool:
     raw = os.getenv(name, default=default_str)
     return raw == "1" or raw == "true" or raw == "True"
 
+def _socket_trace(msg: str):
+    if _env_truthy("SYQURE_SOCKET_TRACE", False):
+        print(f"[socket-trace] {msg}")
+
 
 class MPCComms[TP]:
     pid: int
@@ -291,6 +295,10 @@ class MPCComms[TP]:
         runtime_comm_port = int(os.getenv("SEQURE_COMMUNICATION_PORT", default=str(COMMUNICATION_PORT)))
         runtime_cp_ips_str = os.getenv("SEQURE_CP_IPS")
         runtime_cp_ips: List[str] = runtime_cp_ips_str.split(",") if runtime_cp_ips_str else CP_IPS
+        _socket_trace(
+            f"setup_channels pid={self.pid} parties={self.number_of_parties} tcp_proxy={runtime_tcp_proxy} "
+            f"comm_base={runtime_comm_port} cp_ips={','.join(runtime_cp_ips)} local={self.local} file_transport={FILE_TRANSPORT}"
+        )
 
         # Sockets are spawned per corresponding party
         for pid in range(self.number_of_parties):
@@ -301,6 +309,7 @@ class MPCComms[TP]:
                 self.sockets[pid] = CSocket(ip_address="127.0.0.1", port="0")
                 self.sockets[pid].sock_fd = file_socket_id(self.pid, pid)
                 register_channel(self.sockets[pid].sock_fd, self.pid, pid, FILE_TRANSPORT_DIR)
+                _socket_trace(f"channel file pid={self.pid} peer={pid} sock_fd={self.sockets[pid].sock_fd}")
                 continue
 
             min_pid = min(pid, self.pid)
@@ -312,6 +321,9 @@ class MPCComms[TP]:
             if runtime_tcp_proxy:
                 ip_address = runtime_cp_ips[pid] if runtime_cp_ips else '127.0.0.1'
                 self.sockets[pid] = CSocket(ip_address=ip_address, port=str(port))
+                _socket_trace(
+                    f"channel tcp-proxy pid={self.pid} peer={pid} ip={ip_address} port={port} connect=1"
+                )
                 if (not connect(self.sockets[pid])):
                     raise ValueError(f"CP{self.pid} failed to connect to CP{pid} via proxy")
                 continue
@@ -321,6 +333,9 @@ class MPCComms[TP]:
             else:
                 ip_address = '0.0.0.0' if self.pid < pid else runtime_cp_ips[pid]
                 self.sockets[pid] = CSocket(ip_address=ip_address, port=str(port))
+            _socket_trace(
+                f"channel direct pid={self.pid} peer={pid} ip={ip_address} port={port} host={(self.pid < pid)}"
+            )
 
             if self.pid < pid:
                 self.sockets[pid].open_channel()
@@ -334,4 +349,7 @@ class MPCComms[TP]:
             assert not self.local, "Local data sharing not supported yet"
             # Data sharing host socket is at self.sockets[self.pid]
             self.sockets[self.pid] = CSocket(ip_address='0.0.0.0', port=str(DATA_SHARING_PORT + self.pid))
+            _socket_trace(
+                f"data-sharing open pid={self.pid} ip=0.0.0.0 port={DATA_SHARING_PORT + self.pid}"
+            )
             self.sockets[self.pid].open_channel()
